@@ -31,8 +31,10 @@ class Renderer {
     this.ctx = canvas.getContext('2d');
     this.env = env;
     this.gap = 2;
-    this.qAgent = null;  // set this to a QLearningAgent to enable overlay
-    this.showQ = false;  // toggle Q-value overlay
+    this.qAgent = null;       // set to a QLearningAgent to enable Q overlay
+    this.showQ = false;       // toggle Q-value overlay
+    this.signalField = null;  // set to a SignalField to enable signal overlay
+    this.showSignals = false; // toggle signal overlay
   }
 
   get cellSize() {
@@ -173,6 +175,29 @@ class Renderer {
           else                         ctx.fillStyle = COLORS.empty;
 
           ctx.fillRect(x, y, size, size);
+
+          // Signal overlay: tint empty cells by signal strength
+          if (this.showSignals && this.signalField && cell === CELL_EMPTY) {
+            const sig = this.signalField.read(r, c);
+            if (sig > 0) {
+              // Positive signal: green glow (goal scent)
+              const alpha = Math.min(0.6, sig * 0.6);
+              ctx.fillStyle = `rgba(46, 204, 113, ${alpha})`;
+              ctx.fillRect(x, y, size, size);
+            } else if (sig < 0) {
+              // Negative signal: red glow (pit scent)
+              const alpha = Math.min(0.6, Math.abs(sig) * 0.6);
+              ctx.fillStyle = `rgba(231, 76, 60, ${alpha})`;
+              ctx.fillRect(x, y, size, size);
+            }
+
+            // Show numeric signal value
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = `${Math.floor(size * 0.2)}px system-ui`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(sig.toFixed(2), x + size / 2, y + size / 2);
+          }
 
           // Label goal and pit cells
           if (cell === CELL_GOAL || cell === CELL_PIT) {

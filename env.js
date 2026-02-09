@@ -139,6 +139,130 @@ class GridWorld {
 //
 // A = agent start (5,0), G = goal (0,5), P = pit (3,2), W = walls
 
+/**
+ * SignalField — computes a "scent" field over the grid.
+ *
+ * Each emitter (goal, pit, or agent) radiates a signal that decays
+ * with Manhattan distance. Walls block signal propagation (we use
+ * a BFS flood-fill to compute path distance, not straight-line distance,
+ * so signals curve around walls).
+ *
+ * The field is a 2D array of numbers: positive near goals, negative
+ * near pits. An agent at cell (r,c) can read the signal value and
+ * the signal gradient (difference between neighboring cells) to
+ * decide which way to go.
+ *
+ * decay formula:  signal(d) = strength / (1 + d)
+ *   where d = shortest walkable path distance (BFS) from the emitter.
+ */
+
+class SignalField {
+  constructor(env) {
+    this.env = env;
+    this.rows = env.rows;
+    this.cols = env.cols;
+
+    // The combined signal at each cell
+    this.field = this._createGrid(0);
+
+    // Precompute emitter locations from the layout
+    this.emitters = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (env.layout[r][c] === CELL_GOAL) {
+          this.emitters.push({ row: r, col: c, strength: 1.0 });
+        } else if (env.layout[r][c] === CELL_PIT) {
+          this.emitters.push({ row: r, col: c, strength: -1.0 });
+        }
+      }
+    }
+
+    this.compute();
+  }
+
+  _createGrid(val) {
+    const g = [];
+    for (let r = 0; r < this.rows; r++) {
+      g[r] = new Float64Array(this.cols);
+      if (val !== 0) g[r].fill(val);
+    }
+    return g;
+  }
+
+  /**
+   * BFS from a single cell, returning path distances.
+   * Walls are impassable. Returns a grid of distances (-1 = unreachable).
+   */
+  _bfsDistances(startRow, startCol) {
+    const dist = this._createGrid(-1);
+    dist[startRow][startCol] = 0;
+    const queue = [[startRow, startCol]];
+    let head = 0;
+
+    while (head < queue.length) {
+      const [r, c] = queue[head++];
+      const d = dist[r][c];
+
+      for (const [dr, dc] of DELTAS) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= this.rows || nc < 0 || nc >= this.cols) continue;
+        if (this.env.layout[nr][nc] === CELL_WALL) continue;
+        if (dist[nr][nc] >= 0) continue; // already visited
+        dist[nr][nc] = d + 1;
+        queue.push([nr, nc]);
+      }
+    }
+
+    return dist;
+  }
+
+  /** Recompute the full signal field from all emitters. */
+  compute() {
+    // Zero out
+    for (let r = 0; r < this.rows; r++) {
+      this.field[r].fill(0);
+    }
+
+    // Accumulate signal from each emitter
+    for (const em of this.emitters) {
+      const dist = this._bfsDistances(em.row, em.col);
+      for (let r = 0; r < this.rows; r++) {
+        for (let c = 0; c < this.cols; c++) {
+          if (dist[r][c] < 0) continue; // unreachable
+          this.field[r][c] += em.strength / (1 + dist[r][c]);
+        }
+      }
+    }
+  }
+
+  /** Read the combined signal at a cell. */
+  read(row, col) {
+    return this.field[row][col];
+  }
+
+  /**
+   * Read the signal gradient: the signal value in each of the 4 neighboring
+   * cells (or the current cell if the neighbor is a wall/boundary).
+   * Returns [up, right, down, left] signal values.
+   */
+  gradient(row, col) {
+    const result = [];
+    for (const [dr, dc] of DELTAS) {
+      const nr = row + dr;
+      const nc = col + dc;
+      if (nr < 0 || nr >= this.rows || nc < 0 || nc >= this.cols) {
+        result.push(this.field[row][col]); // boundary: same as current
+      } else if (this.env.layout[nr][nc] === CELL_WALL) {
+        result.push(this.field[row][col]); // wall: same as current
+      } else {
+        result.push(this.field[nr][nc]);
+      }
+    }
+    return result; // [up, right, down, left]
+  }
+}
+
 const DEFAULT_LAYOUT = [
   [0, 0, 0, 0, 0, 2],  // row 0: goal at (0,5)
   [0, 1, 1, 0, 0, 0],  // row 1: walls

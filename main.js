@@ -19,6 +19,10 @@ const qAgent = new QLearningAgent(env.rows, env.cols, {
 });
 renderer.qAgent = qAgent;
 
+// --- Signal field ---
+const signalField = new SignalField(env);
+renderer.signalField = signalField;
+
 function getActiveAgent() {
   const sel = document.getElementById('agentSelect').value;
   return sel === 'qlearn' ? qAgent : randomAgent;
@@ -229,6 +233,21 @@ document.getElementById('speed').addEventListener('input', () => {
 
 document.getElementById('showQ').addEventListener('change', (e) => {
   renderer.showQ = e.target.checked;
+  if (e.target.checked) {
+    // Turn off signals overlay when Q is on (they overlap)
+    renderer.showSignals = false;
+    document.getElementById('showSignals').checked = false;
+  }
+  renderer.draw();
+});
+
+document.getElementById('showSignals').addEventListener('change', (e) => {
+  renderer.showSignals = e.target.checked;
+  if (e.target.checked) {
+    // Turn off Q overlay when signals is on
+    renderer.showQ = false;
+    document.getElementById('showQ').checked = false;
+  }
   renderer.draw();
 });
 
