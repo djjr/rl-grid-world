@@ -6,9 +6,10 @@
  * Each cell is drawn as a colored square with a small gap between cells.
  * The agent is drawn as a circle.
  *
- * When showQ is true and a QLearningAgent is provided, cells are tinted
- * by their max Q-value (green = high, red = low) and small arrows show
- * the best action direction.
+ * When showQ is true and a QLearningAgent is provided, each empty cell
+ * is split into four triangular wedges (up/right/down/left), each colored
+ * by that action's Q-value. Green = high, red = low, blue = near zero.
+ * This shows the full Q-value landscape at a glance.
  */
 
 const COLORS = {
@@ -19,9 +20,6 @@ const COLORS = {
   agent: '#f1c40f',
   grid:  '#16213e',  // gap color (matches canvas bg)
 };
-
-// Arrow symbols for each action direction
-const ARROW_CHARS = ['↑', '→', '↓', '←'];
 
 class Renderer {
   /**
@@ -80,15 +78,17 @@ class Renderer {
     const ctx = this.ctx;
     const size = this.cellSize;
 
-    // If showing Q-values, compute global min/max for consistent coloring
+    // If showing Q-values, compute global min/max across ALL action values
     let minQ = 0, maxQ = 0;
     if (this.showQ && this.qAgent) {
       for (let r = 0; r < this.env.rows; r++) {
         for (let c = 0; c < this.env.cols; c++) {
           if (this.env.layout[r][c] === CELL_WALL) continue;
-          const v = this.qAgent.getMaxQ(r, c);
-          if (v < minQ) minQ = v;
-          if (v > maxQ) maxQ = v;
+          const qv = this.qAgent.getQ(r, c);
+          for (let a = 0; a < NUM_ACTIONS; a++) {
+            if (qv[a] < minQ) minQ = qv[a];
+            if (qv[a] > maxQ) maxQ = qv[a];
+          }
         }
       }
     }
@@ -103,50 +103,85 @@ class Renderer {
         const [x, y] = this.cellOrigin(r, c);
         const cell = this.env.layout[r][c];
 
-        // Base cell color
-        if (cell === CELL_WALL)      ctx.fillStyle = COLORS.wall;
-        else if (cell === CELL_GOAL) ctx.fillStyle = COLORS.goal;
-        else if (cell === CELL_PIT)  ctx.fillStyle = COLORS.pit;
-        else if (this.showQ && this.qAgent) {
-          ctx.fillStyle = this.qColor(this.qAgent.getMaxQ(r, c), minQ, maxQ);
-        }
-        else ctx.fillStyle = COLORS.empty;
-
-        ctx.fillRect(x, y, size, size);
-
-        // Label goal and pit cells
-        if (cell === CELL_GOAL || cell === CELL_PIT) {
-          ctx.fillStyle = '#fff';
-          ctx.font = `bold ${Math.floor(size * 0.35)}px system-ui`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(
-            cell === CELL_GOAL ? 'G' : 'P',
-            x + size / 2,
-            y + size / 2
-          );
-        }
-
-        // Q-value overlay: show best action arrow and max Q value
+        // Q-value wedge view for empty cells when overlay is on
         if (this.showQ && this.qAgent && cell === CELL_EMPTY) {
-          const qValues = this.qAgent.getQ(r, c);
-          let bestA = 0;
-          for (let a = 1; a < NUM_ACTIONS; a++) {
-            if (qValues[a] > qValues[bestA]) bestA = a;
-          }
-          const maxVal = qValues[bestA];
+          const qv = this.qAgent.getQ(r, c);
+          const cx = x + size / 2;
+          const cy = y + size / 2;
 
-          // Arrow showing best direction
-          ctx.fillStyle = 'rgba(255,255,255,0.7)';
-          ctx.font = `bold ${Math.floor(size * 0.4)}px system-ui`;
+          // Four triangles: up, right, down, left
+          // Each is a triangle from center to two adjacent corners
+          const corners = [
+            [x, y],                 // top-left
+            [x + size, y],          // top-right
+            [x + size, y + size],   // bottom-right
+            [x, y + size],          // bottom-left
+          ];
+
+          // action 0 (up):    center → top-left → top-right
+          // action 1 (right): center → top-right → bottom-right
+          // action 2 (down):  center → bottom-right → bottom-left
+          // action 3 (left):  center → bottom-left → top-left
+          for (let a = 0; a < NUM_ACTIONS; a++) {
+            const c1 = corners[a];
+            const c2 = corners[(a + 1) % 4];
+
+            ctx.fillStyle = this.qColor(qv[a], minQ, maxQ);
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(c1[0], c1[1]);
+            ctx.lineTo(c2[0], c2[1]);
+            ctx.closePath();
+            ctx.fill();
+
+            // Thin border between wedges for clarity
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(c1[0], c1[1]);
+            ctx.stroke();
+          }
+
+          // Show Q-value numbers in each wedge
+          const fontSize = Math.floor(size * 0.16);
+          ctx.font = `${fontSize}px system-ui`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(ARROW_CHARS[bestA], x + size / 2, y + size * 0.4);
 
-          // Numeric value
-          ctx.fillStyle = 'rgba(255,255,255,0.5)';
-          ctx.font = `${Math.floor(size * 0.18)}px system-ui`;
-          ctx.fillText(maxVal.toFixed(2), x + size / 2, y + size * 0.75);
+          // Position labels toward each edge
+          const labelPositions = [
+            [cx, y + size * 0.2],           // up
+            [x + size * 0.8, cy],           // right
+            [cx, y + size * 0.8],           // down
+            [x + size * 0.2, cy],           // left
+          ];
+
+          for (let a = 0; a < NUM_ACTIONS; a++) {
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.fillText(qv[a].toFixed(2), labelPositions[a][0], labelPositions[a][1]);
+          }
+        } else {
+          // Normal cell drawing (walls, goal, pit, or plain empty when Q overlay is off)
+          if (cell === CELL_WALL)      ctx.fillStyle = COLORS.wall;
+          else if (cell === CELL_GOAL) ctx.fillStyle = COLORS.goal;
+          else if (cell === CELL_PIT)  ctx.fillStyle = COLORS.pit;
+          else                         ctx.fillStyle = COLORS.empty;
+
+          ctx.fillRect(x, y, size, size);
+
+          // Label goal and pit cells
+          if (cell === CELL_GOAL || cell === CELL_PIT) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.floor(size * 0.35)}px system-ui`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              cell === CELL_GOAL ? 'G' : 'P',
+              x + size / 2,
+              y + size / 2
+            );
+          }
         }
       }
     }
