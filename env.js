@@ -12,6 +12,7 @@
  *   - Reaching a pit cell ends the episode with reward -1.
  *   - Each step that isn't terminal gives reward -0.01 (small cost of living
  *     to encourage finding the goal efficiently).
+ *   - Episodes end after maxSteps to prevent infinite wandering.
  *
  * Actions: 0=up, 1=right, 2=down, 3=left
  */
@@ -41,11 +42,12 @@ class GridWorld {
    * @param {number[][]} layout - 2D array of cell types (CELL_* constants)
    * @param {[number,number]} startPos - [row, col] starting position
    */
-  constructor(layout, startPos) {
+  constructor(layout, startPos, maxSteps = 200) {
     this.layout = layout;
     this.rows = layout.length;
     this.cols = layout[0].length;
     this.startPos = startPos;
+    this.maxSteps = maxSteps;
 
     // Current state
     this.agentRow = startPos[0];
@@ -116,6 +118,12 @@ class GridWorld {
     }
 
     this.totalReward += reward;
+
+    // Timeout check
+    if (!this.done && this.steps >= this.maxSteps) {
+      this.done = true;
+    }
+
     return { state: this.getState(), reward, done: this.done };
   }
 }
