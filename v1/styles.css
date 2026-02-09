@@ -41,12 +41,6 @@ main {
   gap: 12px;
 }
 
-.side-panels {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 canvas {
   border: 2px solid #333;
   border-radius: 4px;
@@ -70,22 +64,12 @@ canvas {
 .control-group .label {
   font-size: 0.8rem;
   color: #aaa;
-  min-width: 60px;
+  min-width: 90px;
 }
 
 .control-group .hint {
   font-size: 0.8rem;
   color: #666;
-}
-
-select {
-  font: inherit;
-  padding: 4px 8px;
-  border: 1px solid #475569;
-  background: #334155;
-  color: #eee;
-  border-radius: 6px;
-  font-size: 0.85rem;
 }
 
 button {
@@ -116,14 +100,6 @@ input[type="range"] {
   font-size: 0.8rem;
   color: #aaa;
   min-width: 80px;
-}
-
-.checkbox-label {
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
 }
 
 /* --- Stats panel --- */
@@ -158,35 +134,4 @@ input[type="range"] {
 #statsTable td:last-child {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* --- Q-learning parameter panel --- */
-.param-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.param-row label {
-  font-size: 0.85rem;
-  color: #aaa;
-}
-
-.param-row input[type="number"] {
-  width: 70px;
-  padding: 4px 6px;
-  border: 1px solid #475569;
-  background: #334155;
-  color: #eee;
-  border-radius: 4px;
-  font: inherit;
-  font-size: 0.85rem;
-  text-align: right;
-}
-
-.param-hint {
-  font-size: 0.75rem;
-  color: #666;
-  margin-bottom: 10px;
 }

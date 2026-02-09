@@ -1,7 +1,11 @@
 'use strict';
 
 /**
- * Main — wires up manual control, agent selection, Q-learning, and stats.
+ * Main — wires up manual control, random agent, and episode statistics.
+ *
+ * You can still drive the agent with arrow keys. But now you can also
+ * let the RandomAgent play — either one visible episode or a batch of
+ * 100 silent episodes to collect statistics.
  */
 
 // --- Setup ---
@@ -9,20 +13,7 @@ const env = new GridWorld(DEFAULT_LAYOUT, DEFAULT_START);
 const canvas = document.getElementById('grid');
 const renderer = new Renderer(canvas, env);
 const statusEl = document.getElementById('status');
-
-// --- Agents ---
-const randomAgent = new RandomAgent();
-const qAgent = new QLearningAgent(env.rows, env.cols, {
-  alpha: 0.1,
-  gamma: 0.95,
-  epsilon: 0.1
-});
-renderer.qAgent = qAgent;
-
-function getActiveAgent() {
-  const sel = document.getElementById('agentSelect').value;
-  return sel === 'qlearn' ? qAgent : randomAgent;
-}
+const agent = new RandomAgent();
 
 // --- Statistics tracking ---
 const stats = {
@@ -49,10 +40,11 @@ function recordEpisode(env) {
   stats.totalSteps += env.steps;
   stats.totalReward += env.totalReward;
 
+  // Figure out how the episode ended
   const cell = env.layout[env.agentRow][env.agentCol];
   if (cell === CELL_GOAL) stats.goals++;
   else if (cell === CELL_PIT) stats.pits++;
-  else stats.timeouts++;
+  else stats.timeouts++; // hit maxSteps without reaching goal or pit
 
   updateStatsDisplay();
 }
@@ -75,25 +67,18 @@ function updateStatsDisplay() {
   }
 }
 
-// --- Sync Q-learning hyperparameters from UI ---
-function syncQParams() {
-  qAgent.alpha   = Number(document.getElementById('alpha').value)   || 0.1;
-  qAgent.gamma   = Number(document.getElementById('gamma').value)   || 0.95;
-  qAgent.epsilon = Number(document.getElementById('epsilon').value) || 0.1;
-}
-
 // --- Animation state ---
-let running = false;
+let running = false;  // true while an animated episode is playing
 
 function setButtonsEnabled(enabled) {
   document.getElementById('runOne').disabled = !enabled;
   document.getElementById('runBatch').disabled = !enabled;
   document.getElementById('resetStats').disabled = !enabled;
-  document.getElementById('resetQ').disabled = !enabled;
 }
 
 function getStepDelay() {
   const speed = Number(document.getElementById('speed').value);
+  // speed 1 = 1000ms, speed 100 = 10ms
   return Math.max(10, Math.round(1000 / speed));
 }
 
@@ -102,9 +87,7 @@ async function runOneEpisode() {
   if (running) return;
   running = true;
   setButtonsEnabled(false);
-  syncQParams();
 
-  const agent = getActiveAgent();
   env.reset();
   renderer.draw();
 
@@ -112,18 +95,26 @@ async function runOneEpisode() {
     const state = env.getState();
     const action = agent.act(state);
     const result = env.step(action);
-
-    // Learn from this transition (no-op for RandomAgent)
-    agent.learn(state, action, result.reward, result.state, result.done);
-
     renderer.draw();
-    statusEl.textContent = `${agent.name} | Step ${env.steps} | Reward: ${env.totalReward.toFixed(2)}`;
 
+    // Update status during animation
+    statusEl.textContent = `Random agent | Step ${env.steps} | Reward: ${env.totalReward.toFixed(2)}`;
+
+    // Wait so the user can see each step
     await sleep(getStepDelay());
   }
 
   recordEpisode(env);
-  showEndStatus(agent.name);
+
+  // Final status
+  const cell = env.layout[env.agentRow][env.agentCol];
+  if (cell === CELL_GOAL) {
+    statusEl.textContent = `Random agent reached goal! ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
+  } else if (cell === CELL_PIT) {
+    statusEl.textContent = `Random agent fell in pit. ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
+  } else {
+    statusEl.textContent = `Random agent timed out. ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
+  }
 
   running = false;
   setButtonsEnabled(true);
@@ -132,33 +123,20 @@ async function runOneEpisode() {
 // --- Run a batch of episodes silently ---
 function runBatch(n) {
   if (running) return;
-  syncQParams();
-  const agent = getActiveAgent();
 
   for (let i = 0; i < n; i++) {
     env.reset();
     while (!env.done) {
       const state = env.getState();
       const action = agent.act(state);
-      const result = env.step(action);
-      agent.learn(state, action, result.reward, result.state, result.done);
+      env.step(action);
     }
     recordEpisode(env);
   }
 
+  // Show final state of last episode
   renderer.draw();
-  statusEl.textContent = `${agent.name}: ran ${n} episodes. See stats panel.`;
-}
-
-function showEndStatus(agentName) {
-  const cell = env.layout[env.agentRow][env.agentCol];
-  if (cell === CELL_GOAL) {
-    statusEl.textContent = `${agentName} reached goal! ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
-  } else if (cell === CELL_PIT) {
-    statusEl.textContent = `${agentName} fell in pit. ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
-  } else {
-    statusEl.textContent = `${agentName} timed out. ${env.steps} steps, reward ${env.totalReward.toFixed(2)}`;
-  }
+  statusEl.textContent = `Ran ${n} episodes. See stats panel.`;
 }
 
 function sleep(ms) {
@@ -170,9 +148,9 @@ env.reset();
 renderer.draw();
 updateStatsDisplay();
 
-// --- Keyboard: manual control ---
+// --- Keyboard: manual control (same as v0) ---
 document.addEventListener('keydown', (e) => {
-  if (running) return;
+  if (running) return; // don't interfere with animation
 
   let action = null;
   switch (e.key) {
@@ -184,7 +162,7 @@ document.addEventListener('keydown', (e) => {
     case 'R':
       env.reset();
       renderer.draw();
-      statusEl.textContent = 'Reset. Use arrow keys or run an agent.';
+      statusEl.textContent = 'Reset. Use arrow keys or run the random agent.';
       return;
   }
 
@@ -206,7 +184,6 @@ document.addEventListener('keydown', (e) => {
 // --- Button handlers ---
 document.getElementById('runOne').addEventListener('click', runOneEpisode);
 document.getElementById('runBatch').addEventListener('click', () => runBatch(100));
-
 document.getElementById('resetStats').addEventListener('click', () => {
   resetStats();
   env.reset();
@@ -214,25 +191,7 @@ document.getElementById('resetStats').addEventListener('click', () => {
   statusEl.textContent = 'Stats reset.';
 });
 
-document.getElementById('resetQ').addEventListener('click', () => {
-  qAgent.resetQ();
-  resetStats();
-  env.reset();
-  renderer.draw();
-  statusEl.textContent = 'Q-table and stats reset.';
-});
-
 document.getElementById('speed').addEventListener('input', () => {
   const speed = document.getElementById('speed').value;
   document.getElementById('speedLabel').textContent = `${speed} steps/sec`;
 });
-
-document.getElementById('showQ').addEventListener('change', (e) => {
-  renderer.showQ = e.target.checked;
-  renderer.draw();
-});
-
-// Live-update hyperparameters
-for (const id of ['alpha', 'gamma', 'epsilon']) {
-  document.getElementById(id).addEventListener('change', syncQParams);
-}
