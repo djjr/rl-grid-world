@@ -118,13 +118,17 @@ class Renderer {
             [x, y + size],          // bottom-left
           ];
 
-          // action 0 (up):    center → top-left → top-right
-          // action 1 (right): center → top-right → bottom-right
-          // action 2 (down):  center → bottom-right → bottom-left
-          // action 3 (left):  center → bottom-left → top-left
+          // Wedge mapping (swapped so the colored region is on the
+          // side you'd move TOWARD, which reads more intuitively):
+          //   action 0 (up)    → bottom wedge (points up toward top edge)
+          //   action 1 (right) → left wedge   (points right toward right edge)
+          //   action 2 (down)  → top wedge    (points down toward bottom edge)
+          //   action 3 (left)  → right wedge  (points left toward left edge)
+          const wedgeFor = [2, 3, 0, 1]; // swap U↔D, L↔R
           for (let a = 0; a < NUM_ACTIONS; a++) {
-            const c1 = corners[a];
-            const c2 = corners[(a + 1) % 4];
+            const w = wedgeFor[a];
+            const c1 = corners[w];
+            const c2 = corners[(w + 1) % 4];
 
             ctx.fillStyle = this.qColor(qv[a], minQ, maxQ);
             ctx.beginPath();
@@ -149,12 +153,12 @@ class Renderer {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
 
-          // Position labels toward each edge
+          // Position labels in the swapped wedges
           const labelPositions = [
-            [cx, y + size * 0.2],           // up
-            [x + size * 0.8, cy],           // right
-            [cx, y + size * 0.8],           // down
-            [x + size * 0.2, cy],           // left
+            [cx, y + size * 0.8],           // up action → bottom wedge
+            [x + size * 0.2, cy],           // right action → left wedge
+            [cx, y + size * 0.2],           // down action → top wedge
+            [x + size * 0.8, cy],           // left action → right wedge
           ];
 
           for (let a = 0; a < NUM_ACTIONS; a++) {
