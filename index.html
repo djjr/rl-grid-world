@@ -23,10 +23,19 @@
         </div>
 
         <div class="control-group">
+          <div class="label">Grid</div>
+          <select id="layoutSelect">
+            <option value="default" selected>Default</option>
+            <option value="transfer">Transfer test</option>
+          </select>
+        </div>
+
+        <div class="control-group">
           <div class="label">Agent</div>
           <select id="agentSelect">
             <option value="random">Random</option>
-            <option value="qlearn" selected>Q-Learning</option>
+            <option value="qlearn">Q-Learning (position)</option>
+            <option value="signalq" selected>Signal Q (gradient)</option>
           </select>
           <button id="runOne">Run 1 Episode</button>
           <button id="runBatch">Run 100 Episodes</button>

@@ -143,3 +143,125 @@ class QLearningAgent {
     this.totalUpdates = 0;
   }
 }
+
+/**
+ * SignalQAgent — Q-learning where the state is what the agent SENSES,
+ * not where it IS.
+ *
+ * Instead of Q[row][col][action], we have Q[signalState][action].
+ *
+ * The signal state is built from the gradient of the signal field:
+ * for each of the 4 directions, we compute
+ *   delta = signal(neighbor) - signal(here)
+ * and discretize it into one of 3 bins:
+ *   0 = negative (signal gets worse that way)
+ *   1 = ~zero    (signal stays about the same)
+ *   2 = positive (signal gets better that way)
+ *
+ * This gives 3^4 = 81 possible states. The agent learns rules like
+ * "when signal improves to the right, go right" — which transfer
+ * to any grid with the same type of signals.
+ *
+ * The threshold parameter controls how big a delta must be to count
+ * as positive or negative (vs. ~zero).
+ */
+
+class SignalQAgent {
+  constructor(signalField, { alpha = 0.1, gamma = 0.95, epsilon = 0.1, threshold = 0.05 } = {}) {
+    this.name = 'Signal Q';
+    this.signalField = signalField;
+    this.alpha = alpha;
+    this.gamma = gamma;
+    this.epsilon = epsilon;
+    this.threshold = threshold;
+
+    // 81 possible signal states, 4 actions each
+    this.numStates = 81; // 3^4
+    this.q = [];
+    for (let s = 0; s < this.numStates; s++) {
+      this.q[s] = new Float64Array(NUM_ACTIONS);
+    }
+
+    this.totalUpdates = 0;
+  }
+
+  /**
+   * Convert a grid position to a signal-based state index.
+   *
+   * Reads the signal gradient (how signal changes in each direction)
+   * and discretizes into bins:
+   *   delta < -threshold  →  0 (worse)
+   *   |delta| <= threshold →  1 (neutral)
+   *   delta > threshold   →  2 (better)
+   *
+   * Encodes as a base-3 number: up*27 + right*9 + down*3 + left*1
+   */
+  _stateIndex(gridState) {
+    const [row, col] = gridState;
+    const here = this.signalField.read(row, col);
+    const neighbors = this.signalField.gradient(row, col); // [up, right, down, left]
+
+    let index = 0;
+    const multipliers = [27, 9, 3, 1]; // base-3 place values
+
+    for (let d = 0; d < 4; d++) {
+      const delta = neighbors[d] - here;
+      let bin;
+      if (delta < -this.threshold)      bin = 0; // worse
+      else if (delta > this.threshold)  bin = 2; // better
+      else                              bin = 1; // neutral
+      index += bin * multipliers[d];
+    }
+
+    return index;
+  }
+
+  act(gridState) {
+    const s = this._stateIndex(gridState);
+
+    if (Math.random() < this.epsilon) {
+      return Math.floor(Math.random() * NUM_ACTIONS);
+    }
+
+    const qValues = this.q[s];
+    let bestVal = qValues[0];
+    let bestActions = [0];
+
+    for (let a = 1; a < NUM_ACTIONS; a++) {
+      if (qValues[a] > bestVal) {
+        bestVal = qValues[a];
+        bestActions = [a];
+      } else if (qValues[a] === bestVal) {
+        bestActions.push(a);
+      }
+    }
+
+    return bestActions[Math.floor(Math.random() * bestActions.length)];
+  }
+
+  learn(gridState, action, reward, nextGridState, done) {
+    const s = this._stateIndex(gridState);
+    const ns = this._stateIndex(nextGridState);
+
+    const currentQ = this.q[s][action];
+
+    let target;
+    if (done) {
+      target = reward;
+    } else {
+      const nextQ = this.q[ns];
+      const maxNextQ = Math.max(nextQ[0], nextQ[1], nextQ[2], nextQ[3]);
+      target = reward + this.gamma * maxNextQ;
+    }
+
+    this.q[s][action] = currentQ + this.alpha * (target - currentQ);
+    this.totalUpdates++;
+  }
+
+  resetQ() {
+    for (let s = 0; s < this.numStates; s++) {
+      this.q[s].fill(0);
+    }
+    this.totalUpdates = 0;
+  }
+}

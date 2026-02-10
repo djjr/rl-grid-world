@@ -273,3 +273,25 @@ const DEFAULT_LAYOUT = [
 ];
 
 const DEFAULT_START = [5, 0];
+
+// --- Transfer test layout: different shape, same idea ---
+//
+//  . . . . . .
+//  . . . W . .
+//  G . . W . .
+//  . . . . . P
+//  . W W . . .
+//  . . . . . A
+//
+// A = agent start (5,5), G = goal (2,0), P = pit (3,5)
+
+const TRANSFER_LAYOUT = [
+  [0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 1, 0, 0],
+  [2, 0, 0, 1, 0, 0],
+  [0, 0, 0, 0, 0, 3],
+  [0, 1, 1, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0],
+];
+
+const TRANSFER_START = [5, 5];

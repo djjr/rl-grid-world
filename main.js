@@ -4,28 +4,67 @@
  * Main — wires up manual control, agent selection, Q-learning, and stats.
  */
 
+// --- Layouts ---
+const LAYOUTS = {
+  default:  { layout: DEFAULT_LAYOUT,  start: DEFAULT_START },
+  transfer: { layout: TRANSFER_LAYOUT, start: TRANSFER_START },
+};
+
 // --- Setup ---
-const env = new GridWorld(DEFAULT_LAYOUT, DEFAULT_START);
+let env = new GridWorld(DEFAULT_LAYOUT, DEFAULT_START);
+let signalField = new SignalField(env);
+
 const canvas = document.getElementById('grid');
-const renderer = new Renderer(canvas, env);
+let renderer = new Renderer(canvas, env);
 const statusEl = document.getElementById('status');
 
 // --- Agents ---
 const randomAgent = new RandomAgent();
-const qAgent = new QLearningAgent(env.rows, env.cols, {
-  alpha: 0.1,
-  gamma: 0.95,
-  epsilon: 0.1
+let qAgent = new QLearningAgent(env.rows, env.cols, {
+  alpha: 0.1, gamma: 0.95, epsilon: 0.1
 });
-renderer.qAgent = qAgent;
+let signalQAgent = new SignalQAgent(signalField, {
+  alpha: 0.1, gamma: 0.95, epsilon: 0.1
+});
 
-// --- Signal field ---
-const signalField = new SignalField(env);
+renderer.qAgent = qAgent;
 renderer.signalField = signalField;
 
 function getActiveAgent() {
   const sel = document.getElementById('agentSelect').value;
-  return sel === 'qlearn' ? qAgent : randomAgent;
+  if (sel === 'qlearn') return qAgent;
+  if (sel === 'signalq') return signalQAgent;
+  return randomAgent;
+}
+
+/** Switch to a different grid layout. Rebuilds env, signal field, and position-based Q agent. */
+function switchLayout(key) {
+  const { layout, start } = LAYOUTS[key];
+  env = new GridWorld(layout, start);
+  signalField = new SignalField(env);
+
+  // Position-based Q-agent must be rebuilt (grid shape changed)
+  qAgent = new QLearningAgent(env.rows, env.cols, {
+    alpha: Number(document.getElementById('alpha').value) || 0.1,
+    gamma: Number(document.getElementById('gamma').value) || 0.95,
+    epsilon: Number(document.getElementById('epsilon').value) || 0.1,
+  });
+
+  // Signal Q-agent keeps its Q-table! That's the whole point —
+  // it learned about signal patterns, not positions.
+  signalQAgent.signalField = signalField;
+
+  // Reconnect renderer
+  renderer = new Renderer(canvas, env);
+  renderer.qAgent = qAgent;
+  renderer.signalField = signalField;
+  renderer.showQ = document.getElementById('showQ').checked;
+  renderer.showSignals = document.getElementById('showSignals').checked;
+
+  env.reset();
+  renderer.draw();
+  resetStats();
+  statusEl.textContent = `Switched to ${key} layout. Position Q-table reset; Signal Q preserved.`;
 }
 
 // --- Statistics tracking ---
@@ -81,9 +120,11 @@ function updateStatsDisplay() {
 
 // --- Sync Q-learning hyperparameters from UI ---
 function syncQParams() {
-  qAgent.alpha   = Number(document.getElementById('alpha').value)   || 0.1;
-  qAgent.gamma   = Number(document.getElementById('gamma').value)   || 0.95;
-  qAgent.epsilon = Number(document.getElementById('epsilon').value) || 0.1;
+  const alpha   = Number(document.getElementById('alpha').value)   || 0.1;
+  const gamma   = Number(document.getElementById('gamma').value)   || 0.95;
+  const epsilon = Number(document.getElementById('epsilon').value) || 0.1;
+  qAgent.alpha = alpha;       qAgent.gamma = gamma;       qAgent.epsilon = epsilon;
+  signalQAgent.alpha = alpha; signalQAgent.gamma = gamma;  signalQAgent.epsilon = epsilon;
 }
 
 // --- Animation state ---
@@ -220,10 +261,11 @@ document.getElementById('resetStats').addEventListener('click', () => {
 
 document.getElementById('resetQ').addEventListener('click', () => {
   qAgent.resetQ();
+  signalQAgent.resetQ();
   resetStats();
   env.reset();
   renderer.draw();
-  statusEl.textContent = 'Q-table and stats reset.';
+  statusEl.textContent = 'All Q-tables and stats reset.';
 });
 
 document.getElementById('speed').addEventListener('input', () => {
@@ -255,3 +297,9 @@ document.getElementById('showSignals').addEventListener('change', (e) => {
 for (const id of ['alpha', 'gamma', 'epsilon']) {
   document.getElementById(id).addEventListener('change', syncQParams);
 }
+
+// Layout switcher
+document.getElementById('layoutSelect').addEventListener('change', (e) => {
+  if (running) return;
+  switchLayout(e.target.value);
+});
